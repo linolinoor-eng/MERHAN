@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b1329">
+  <title>JOANIS - Sistema Pro de Registro de Merma</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- html5-qrcode para Escaneo de Códigos de Barras en Vivo -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- XLSX library -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- ExcelJS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+  <!-- FileSaver -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+  <style>
+    body { background-color: #0b1329; color: #f3f4f6; font-family: system-ui, -apple-system, sans-serif; }
+    .header-banner { background-color: #0E3846; }
+    .rules-banner { background-color: #37535E; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    .modal-flotante { display: none; }
+    .modal-flotante.active { display: flex !important; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col p-3 sm:p-6 max-w-5xl mx-auto space-y-5">
+
+  <!-- PESTAÑAS SUPERIORES DE NAVEGACIÓN -->
+  <div class="flex gap-2">
+    <button onclick="switchMainTab('merma')" id="tab-btn-merma" class="bg-cyan-600 text-white font-bold px-6 py-2.5 rounded-t-xl text-sm flex items-center gap-2 shadow-lg transition-all">
+      <i data-lucide="package" class="w-4 h-4"></i> MERMA
+    </button>
+    <button onclick="switchMainTab('carpetas')" id="tab-btn-carpetas" class="bg-slate-800/80 text-slate-400 hover:text-white font-bold px-6 py-2.5 rounded-t-xl text-sm flex items-center gap-2 shadow transition-all">
+      <i data-lucide="folder" class="w-4 h-4"></i> CARPETAS
+    </button>
+  </div>
+
+  <!-- CONTENEDOR PRINCIPAL - PESTAÑA MERMA -->
+  <main id="sec-merma" class="space-y-5">
+    
+    <!-- PANEL DE ACCIONES -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
+      <div class="grid grid-cols-3 gap-3">
+        <label class="bg-slate-800/90 hover:bg-slate-800 border border-cyan-800/60 hover:border-cyan-500 text-cyan-300 font-bold p-3.5 rounded-xl flex flex-col sm:flex-row items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer text-center transition-all shadow-md group">
+          <i data-lucide="upload" class="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform"></i>
+          <span>IMPORTAR ERP</span>
+          <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="loadERPFile(event)">
+        </label>
+
+        <button onclick="exportToExcel()" class="bg-emerald-950/80 hover:bg-emerald-900/90 border border-emerald-800 hover:border-emerald-500 text-emerald-300 font-bold p-3.5 rounded-xl flex flex-col sm:flex-row items-center justify-center gap-2 text-xs sm:text-sm text-center transition-all shadow-md group">
+          <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform"></i>
+          <span>EXPORTAR</span>
+        </button>
+
+        <button onclick="confirmarAccion('¿Deseas vaciar toda la lista actual?', () => { mermaList = []; guardarEstadoLocal(); renderMermaTable(); mostrarNotificacion('Lista vaciada con éxito'); })" class="bg-rose-950/80 hover:bg-rose-900/90 border border-rose-800 hover:border-rose-500 text-rose-300 font-bold p-3.5 rounded-xl flex flex-col sm:flex-row items-center justify-center gap-2 text-xs sm:text-sm text-center transition-all shadow-md group">
+          <i data-lucide="trash-2" class="w-4 h-4 text-rose-400 group-hover:scale-110 transition-transform"></i>
+          <span>BORRAR</span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <button onclick="openModal('modal-datos')" class="bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-cyan-500 text-slate-200 font-bold p-4 rounded-xl flex items-center justify-center gap-3 text-xs sm:text-sm shadow-md transition-all group">
+          <div class="p-2 bg-slate-900 rounded-lg border border-slate-700 group-hover:border-cyan-500">
+            <i data-lucide="file-text" class="w-5 h-5 text-cyan-400"></i>
+          </div>
+          <div class="text-left">
+            <div class="text-[10px] uppercase text-slate-400 font-semibold tracking-wider">DATOS GENERALES</div>
+            <div id="btn-doc-title" class="font-bold text-white truncate max-w-[150px] text-sm">Cabecera</div>
+          </div>
+        </button>
+
+        <button onclick="openModal('modal-registro')" class="bg-blue-600 hover:bg-blue-500 text-white font-bold p-4 rounded-xl flex items-center justify-center gap-3 text-xs sm:text-sm shadow-lg shadow-blue-950 transition-all group">
+          <div class="p-2 bg-blue-700 rounded-lg border border-blue-400/30">
+            <i data-lucide="plus-circle" class="w-5 h-5"></i>
+          </div>
+          <div class="text-left">
+            <div class="text-[10px] uppercase text-blue-200 font-semibold tracking-wider">AGREGAR ÍTEM</div>
+            <div class="font-bold text-white text-sm">NUEVO REGISTRO</div>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <!-- BARRA RESUMEN -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-3 flex justify-between items-center text-xs shadow-md">
+      <div class="flex items-center gap-2 text-slate-300">
+        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+        <span id="info-cabecera-resumen" class="font-medium">Sin datos de tienda definidos</span>
+      </div>
+      <div id="info-count-badge" class="bg-cyan-950 text-cyan-400 border border-cyan-800 px-3 py-1 rounded-full font-mono font-bold">
+        0 ítems registrados
+      </div>
+    </div>
+
+    <!-- TABLA VISTA PREVIA -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+        <h3 class="font-bold text-white text-sm tracking-wide flex items-center gap-2">
+          <i data-lucide="list" class="w-4 h-4 text-cyan-400"></i> Vista Previa Actual
+        </h3>
+        <button onclick="finalizarYGuardarCarpeta()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-purple-950 transition-all">
+          <i data-lucide="folder-check" class="w-4 h-4"></i> Guardar Carpeta
+        </button>
+      </div>
+
+      <div class="overflow-x-auto custom-scrollbar border border-slate-800 rounded-xl min-h-[300px]">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead>
+            <tr class="header-banner text-white uppercase text-[11px] border-b border-cyan-950">
+              <th class="p-3 text-center border-r border-cyan-900/40">N.°</th>
+              <th class="p-3 text-center border-r border-cyan-900/40">SKU</th>
+              <th class="p-3 text-center border-r border-cyan-900/40 min-w-[180px]">Descripción</th>
+              <th class="p-3 text-center border-r border-cyan-900/40">Cant</th>
+              <th class="p-3 text-center border-r border-cyan-900/40">PC (S/)</th>
+              <th class="p-3 text-center border-r border-cyan-900/40">PV (S/)</th>
+              <th class="p-3 text-center border-r border-cyan-900/40">Motivo</th>
+              <th class="p-3 text-center border-r border-cyan-900/40">Destino</th>
+              <th class="p-3 text-center border-r border-cyan-900/40">Foto</th>
+              <th class="p-3 text-center">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="merma-table-body" class="divide-y divide-slate-800 text-slate-200">
+            <!-- Dinámico -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- PESTAÑA CARPETAS -->
+  <main id="sec-carpetas" class="hidden space-y-4">
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+      <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-white text-base flex items-center gap-2">
+          <i data-lucide="folder-open" class="w-5 h-5 text-purple-400"></i> Carpetas Guardadas en el Sistema
+        </h3>
+        <span class="text-xs text-slate-400">Almacenamiento Local (Offline)</span>
+      </div>
+      <div id="carpetas-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Dinámico -->
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== VENTANAS FLOTANTES Y MODALES ==================== -->
+
+  <!-- MODAL 1: DATOS GENERALES -->
+  <div id="modal-datos" class="modal-flotante fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="text-white font-bold text-sm flex items-center gap-2">
+          <i data-lucide="file-text" class="w-4 h-4 text-cyan-400"></i> DATOS DEL DOCUMENTO
+        </h3>
+        <button onclick="closeModal('modal-datos')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="space-y-3">
+        <div><label class="block text-xs text-slate-300 mb-1 font-semibold uppercase">Tienda / Sede *</label><input type="text" id="head-tienda" oninput="updateDocInfo(); guardarEstadoLocal();" placeholder="Ej: COMAS" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-xs focus:border-cyan-500 focus:outline-none"></div>
+        <div><label class="block text-xs text-slate-300 mb-1 font-semibold uppercase">Responsable *</label><input type="text" id="head-responsable" oninput="updateDocInfo(); guardarEstadoLocal();" placeholder="Ej: Lino Fajardo" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-xs focus:border-cyan-500 focus:outline-none"></div>
+        <div><label class="block text-xs text-slate-300 mb-1 font-semibold uppercase">Fecha</label><input type="date" id="head-fecha" onchange="guardarEstadoLocal()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-xs focus:border-cyan-500 focus:outline-none"></div>
+        <div><label class="block text-xs text-slate-300 mb-1 font-semibold uppercase">N.º de Guía</label><input type="text" id="head-guia" oninput="updateDocInfo(); guardarEstadoLocal();" placeholder="Ej: G001-452" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-xs focus:border-cyan-500 focus:outline-none"></div>
+        <button onclick="closeModal('modal-datos')" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2.5 rounded-xl font-bold text-xs shadow-lg mt-2">Guardar y Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: REGISTRO DE PRODUCTO EN 2 PASOS (CON ESCÁNER DE BARRAS) -->
+  <div id="modal-registro" class="modal-flotante fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span id="step-indicator" class="bg-blue-950 text-blue-400 text-xs font-bold px-2.5 py-0.5 rounded-full border border-blue-800">Paso 1 de 2</span>
+          <h3 class="text-white font-bold text-sm">Registrar Producto</h3>
+        </div>
+        <button onclick="closeModal('modal-registro')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <!-- Paso 1 -->
+      <div id="reg-step-1" class="space-y-3">
+        <div class="flex justify-between items-center">
+          <label class="text-[11px] text-cyan-400 font-semibold block">BUSCAR EN ERP</label>
+          <button type="button" onclick="openBarcodeScanner()" class="bg-cyan-950 hover:bg-cyan-900 border border-cyan-800 text-cyan-300 px-2.5 py-1 rounded text-[11px] font-bold flex items-center gap-1 transition-colors">
+            <i data-lucide="scan-barcode" class="w-3.5 h-3.5 text-cyan-400"></i><span>Escanear con Cámara</span>
+          </button>
+        </div>
+
+        <div class="relative">
+          <input type="text" id="search-input" oninput="onSearchInput()" placeholder="Escribe SKU, nombre o escanea..." class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:border-cyan-500 focus:outline-none">
+          <div id="search-results" class="hidden absolute left-0 right-0 top-full bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 max-h-40 overflow-y-auto custom-scrollbar"></div>
+        </div>
+
+        <div><label class="text-[10px] text-slate-300 font-semibold uppercase">SKU *</label><input type="text" id="form-sku" placeholder="Ej: 10S-1616" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs"></div>
+        <div><label class="text-[10px] text-slate-300 font-semibold uppercase">DESCRIPCIÓN *</label><input type="text" id="form-desc" placeholder="Nombre completo del producto" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs"></div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <div><label class="text-[10px] text-slate-300 font-semibold uppercase">CANTIDAD</label><input type="number" id="form-cant" min="1" value="1" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs"></div>
+          <div><label class="text-[10px] text-slate-300 font-semibold uppercase">PC (S/)</label><input type="number" step="0.01" id="form-pc" value="0.00" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs"></div>
+          <div><label class="text-[10px] text-slate-300 font-semibold uppercase">PV (S/)</label><input type="number" step="0.01" id="form-pv" value="0.00" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs"></div>
+        </div>
+
+        <button onclick="goToStep(2)" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow mt-2">
+          <span>SIGUIENTE</span> <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Paso 2 -->
+      <div id="reg-step-2" class="hidden space-y-3">
+        <div>
+          <label class="text-[10px] text-slate-300 font-semibold uppercase">MOTIVO DE MERMA</label>
+          <select id="form-motivo" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs">
+            <option>Empaque Roto</option>
+            <option>Producto Dañado</option>
+            <option>Vencimiento</option>
+            <option>Falla de Fábrica</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[10px] text-slate-300 font-semibold uppercase">DESTINO</label>
+            <select id="form-destino" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs">
+              <option>ENVÍO FÍSICO</option>
+              <option>DESECHO</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[10px] text-slate-300 font-semibold uppercase">FECHA ENVÍO</label>
+            <input type="date" id="form-fecha-envio" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs">
+          </div>
+        </div>
+
+        <div>
+          <label class="text-[10px] text-slate-300 font-semibold uppercase block mb-1">EVIDENCIA FOTOGRÁFICA</label>
+          <label class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white px-3 py-2 rounded-lg text-xs cursor-pointer flex items-center gap-2 justify-center">
+            <i data-lucide="camera" class="w-4 h-4 text-cyan-400"></i>
+            <span>Subir / Tomar Foto</span>
+            <input type="file" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
+          </label>
+          <div id="photo-preview-container" class="hidden mt-2 text-center">
+            <img id="photo-preview" class="h-16 w-auto rounded border border-slate-700 mx-auto">
+          </div>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button onclick="goToStep(1)" class="w-1/3 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-xl font-bold text-xs">Atrás</button>
+          <button onclick="agregarProductoFinal()" class="w-2/3 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1 shadow">
+            <i data-lucide="check" class="w-4 h-4"></i> Agregar a Lista
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VISOR ESCÁNER CÁMARA MODAL -->
+  <div id="scanner-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-4 flex flex-col items-center space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center w-full border-b border-slate-800 pb-2">
+        <h4 class="text-white font-bold text-sm flex items-center gap-2">
+          <i data-lucide="scan" class="w-4 h-4 text-cyan-400"></i>
+          <span>Escaneando Código de Barras</span>
+        </h4>
+        <button type="button" onclick="closeBarcodeScanner()" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div id="interactive-scanner" class="w-full h-64 bg-black rounded-lg overflow-hidden border border-slate-700"></div>
+      <p class="text-xs text-slate-400 text-center">Apunta con la cámara al código de barras del empaque.</p>
+    </div>
+  </div>
+
+  <!-- MODAL DE NOTIFICACIONES Y CONFIRMACIONES -->
+  <div id="modal-alerta" class="modal-flotante fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-2xl text-center">
+      <div id="alerta-icono" class="w-12 h-12 rounded-full bg-cyan-950 border border-cyan-800 flex items-center justify-center mx-auto text-cyan-400">
+        <i data-lucide="bell" class="w-6 h-6"></i>
+      </div>
+      <h4 id="alerta-titulo" class="text-white font-bold text-base">Notificación</h4>
+      <p id="alerta-mensaje" class="text-xs text-slate-300">Mensaje del sistema...</p>
+      <div id="alerta-botones" class="flex gap-2 pt-2">
+        <button onclick="cerrarAlerta()" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2.5 rounded-xl font-bold text-xs">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let erpDatabase = [
+      { sku: '10S-1616', barcode: '623500016162', name: 'ADORNO PAPA NOEL CALVO' },
+      { sku: 'C-2578', barcode: '0', name: 'SECADOR DE ROPA CON ROPERO' },
+      { sku: 'J65', barcode: '7758676002943', name: 'ENCENDEDOR ELECTRONICO' }
+    ];
+    let mermaList = [];
+    let currentPhotoBase64 = null;
+    let historialMermas = [];
+    let callbackConfirmacion = null;
+    let html5QrCodeScanner = null;
+
+    // URL oficial de Google Sheets configurada
+    const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbz8zu9gJxhxaLbXXxahhp8mqkxGn9YRRJmef0PtO6VfznpXUhBGzUdvolDpvb9k7BkRMg/exec";
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('head-fecha').value = today;
+      document.getElementById('form-fecha-envio').value = today;
+
+      // Cargar persistencia anti-F5
+      const savedState = localStorage.getItem('joanis_estado_actual');
+      if(savedState) {
+        try {
+          const state = JSON.parse(savedState);
+          document.getElementById('head-tienda').value = state.tienda || '';
+          document.getElementById('head-responsable').value = state.responsable || '';
+          if(state.fecha) document.getElementById('head-fecha').value = state.fecha;
+          document.getElementById('head-guia').value = state.guia || '';
+          mermaList = state.items || [];
+        } catch(e) {}
+      }
+
+      const savedHistorial = localStorage.getItem('joanis_historial_mermas');
+      if(savedHistorial) { try { historialMermas = JSON.parse(savedHistorial); } catch(e){} }
+
+      lucide.createIcons();
+      updateDocInfo();
+      renderMermaTable();
+      renderCarpetasGrid();
+    });
+
+    function guardarEstadoLocal() {
+      const state = {
+        tienda: document.getElementById('head-tienda').value,
+        responsable: document.getElementById('head-responsable').value,
+        fecha: document.getElementById('head-fecha').value,
+        guia: document.getElementById('head-guia').value,
+        items: mermaList
+      };
+      localStorage.setItem('joanis_estado_actual', JSON.stringify(state));
+    }
+
+    // --- FUNCIÓN PARA ENVIAR DATOS A GOOGLE SHEETS ---
+    function enviarAGoogleSheets(productoData) {
+      fetch(GOOGLE_SHEETS_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(productoData)
+      })
+      .then(() => {
+        console.log("Dato enviado a Google Sheets correctamente");
+      })
+      .catch(err => {
+        console.error("Error al sincronizar con Google Sheets:", err);
+      });
+    }
+
+    function mostrarNotificacion(mensaje, titulo = "Aviso del Sistema") {
+      document.getElementById('alerta-titulo').textContent = titulo;
+      document.getElementById('alerta-mensaje').textContent = mensaje;
+      document.getElementById('alerta-botones').innerHTML = `<button onclick="cerrarAlerta()" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2.5 rounded-xl font-bold text-xs">Aceptar</button>`;
+      lucide.createIcons();
+      document.getElementById('modal-alerta').classList.add('active');
+    }
+
+    function confirmarAccion(mensaje, onConfirmar) {
+      document.getElementById('alerta-titulo').textContent = 'Confirmar Acción';
+      document.getElementById('alerta-mensaje').textContent = mensaje;
+      callbackConfirmacion = onConfirmar;
+      document.getElementById('alerta-botones').innerHTML = `
+        <button onclick="cerrarAlerta()" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-xl font-bold text-xs">Cancelar</button>
+        <button onclick="ejecutarConfirmacion()" class="w-1/2 bg-rose-600 hover:bg-rose-500 text-white py-2.5 rounded-xl font-bold text-xs">Sí, Continuar</button>
+      `;
+      lucide.createIcons();
+      document.getElementById('modal-alerta').classList.add('active');
+    }
+
+    function ejecutarConfirmacion() {
+      if(callbackConfirmacion) callbackConfirmacion();
+      cerrarAlerta();
+    }
+
+    function cerrarAlerta() {
+      document.getElementById('modal-alerta').classList.remove('active');
+      callbackConfirmacion = null;
+    }
+
+    function openModal(id) { document.getElementById(id).classList.add('active'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    function switchMainTab(tab) {
+      if(tab === 'merma') {
+        document.getElementById('sec-merma').classList.remove('hidden');
+        document.getElementById('sec-carpetas').classList.add('hidden');
+        document.getElementById('tab-btn-merma').className = 'bg-cyan-600 text-white font-bold px-6 py-2.5 rounded-t-xl text-sm flex items-center gap-2 shadow-lg transition-all';
+        document.getElementById('tab-btn-carpetas').className = 'bg-slate-800/80 text-slate-400 hover:text-white font-bold px-6 py-2.5 rounded-t-xl text-sm flex items-center gap-2 shadow transition-all';
+      } else {
+        document.getElementById('sec-merma').classList.add('hidden');
+        document.getElementById('sec-carpetas').classList.remove('hidden');
+        document.getElementById('tab-btn-carpetas').className = 'bg-purple-600 text-white font-bold px-6 py-2.5 rounded-t-xl text-sm flex items-center gap-2 shadow-lg transition-all';
+        document.getElementById('tab-btn-merma').className = 'bg-slate-800/80 text-slate-400 hover:text-white font-bold px-6 py-2.5 rounded-t-xl text-sm flex items-center gap-2 shadow transition-all';
+        renderCarpetasGrid();
+      }
+    }
+
+    function goToStep(step) {
+      if(step === 2) {
+        const sku = document.getElementById('form-sku').value.trim();
+        const desc = document.getElementById('form-desc').value.trim();
+        if(!sku || !desc) { mostrarNotificacion('Por favor completa SKU y Descripción antes de continuar.'); return; }
+        document.getElementById('reg-step-1').classList.add('hidden');
+        document.getElementById('reg-step-2').classList.remove('hidden');
+        document.getElementById('step-indicator').textContent = 'Paso 2 de 2';
+      } else {
+        document.getElementById('reg-step-2').classList.add('hidden');
+        document.getElementById('reg-step-1').classList.remove('hidden');
+        document.getElementById('step-indicator').textContent = 'Paso 1 de 2';
+      }
+    }
+
+    function updateDocInfo() {
+      const tienda = document.getElementById('head-tienda').value.trim();
+      const guia = document.getElementById('head-guia').value.trim();
+      document.getElementById('btn-doc-title').textContent = tienda || 'Cabecera';
+      document.getElementById('info-cabecera-resumen').textContent = (tienda || guia) ? `Tienda: ${tienda || 'Sede'} | Guía: ${guia || 'Sin Guía'}` : 'Sin datos de tienda definidos';
+    }
+
+    // --- ESCÁNER DE CÓDIGO DE BARRAS CON CÁMARA ---
+    function openBarcodeScanner() {
+      document.getElementById('scanner-modal').classList.remove('hidden');
+      html5QrCodeScanner = new Html5Qrcode("interactive-scanner");
+      html5QrCodeScanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 150 } },
+        (decodedText) => {
+          closeBarcodeScanner();
+          document.getElementById('search-input').value = decodedText;
+          onSearchInput();
+          const match = erpDatabase.find(p => p.sku === decodedText || p.barcode === decodedText);
+          if (match) selectProduct(match.sku);
+        },
+        (errorMessage) => {}
+      ).catch(err => {
+        mostrarNotificacion("No se pudo acceder a la cámara. Revisa los permisos.");
+        closeBarcodeScanner();
+      });
+    }
+
+    function closeBarcodeScanner() {
+      if (html5QrCodeScanner) {
+        html5QrCodeScanner.stop().then(() => {
+          html5QrCodeScanner.clear();
+          document.getElementById('scanner-modal').classList.add('hidden');
+        }).catch(() => {
+          document.getElementById('scanner-modal').classList.add('hidden');
+        });
+      } else {
+        document.getElementById('scanner-modal').classList.add('hidden');
+      }
+    }
+
+    function onSearchInput() {
+      const q = document.getElementById('search-input').value.toLowerCase();
+      const res = document.getElementById('search-results');
+      if(!q) { res.classList.add('hidden'); return; }
+      const matches = erpDatabase.filter(p => p.sku.toLowerCase().includes(q) || (p.barcode && p.barcode.toLowerCase().includes(q)) || p.name.toLowerCase().includes(q)).slice(0,4);
+      res.innerHTML = matches.length ? matches.map(m => `<div onclick="selectProduct('${m.sku}')" class="p-2 hover:bg-slate-700 cursor-pointer text-xs text-white border-b border-slate-700 font-mono"><b>[${m.sku}]</b> ${m.name}</div>`).join('') : '<div class="p-2 text-xs text-slate-400">Sin resultados</div>';
+      res.classList.remove('hidden');
+    }
+
+    function selectProduct(sku) {
+      const p = erpDatabase.find(x => x.sku === sku);
+      if(p) { document.getElementById('form-sku').value = p.sku; document.getElementById('form-desc').value = p.name; }
+      document.getElementById('search-results').classList.add('hidden');
+      document.getElementById('search-input').value = '';
+    }
+
+    function handlePhotoUpload(e) {
+      const file = e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = evt => {
+        currentPhotoBase64 = evt.target.result;
+        document.getElementById('photo-preview').src = currentPhotoBase64;
+        document.getElementById('photo-preview-container').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function agregarProductoFinal() {
+      const nuevoItem = {
+        id: Date.now(),
+        sku: document.getElementById('form-sku').value.trim(),
+        desc: document.getElementById('form-desc').value.trim(),
+        cant: parseInt(document.getElementById('form-cant').value) || 1,
+        pc: parseFloat(document.getElementById('form-pc').value) || 0,
+        pv: parseFloat(document.getElementById('form-pv').value) || 0,
+        motivo: document.getElementById('form-motivo').value,
+        destino: document.getElementById('form-destino').value,
+        fechaEnvio: document.getElementById('form-fecha-envio').value,
+        photo: currentPhotoBase64
+      };
+
+      mermaList.push(nuevoItem);
+
+      // Envío automático a Google Sheets en segundo plano
+      enviarAGoogleSheets({
+        sku: nuevoItem.sku,
+        descripcion: nuevoItem.desc,
+        cantidad: nuevoItem.cant,
+        pc: nuevoItem.pc,
+        pv: nuevoItem.pv,
+        motivo: nuevoItem.motivo,
+        destino: nuevoItem.destino,
+        usuario: document.getElementById('head-responsable').value.trim() || 'Lino'
+      });
+
+      guardarEstadoLocal();
+      renderMermaTable();
+      closeModal('modal-registro');
+      
+      document.getElementById('form-sku').value = '';
+      document.getElementById('form-desc').value = '';
+      document.getElementById('form-cant').value = '1';
+      document.getElementById('form-pc').value = '0.00';
+      document.getElementById('form-pv').value = '0.00';
+      currentPhotoBase64 = null;
+      document.getElementById('photo-preview-container').classList.add('hidden');
+      goToStep(1);
+    }
+
+    function deleteItem(id) {
+      mermaList = mermaList.filter(i => i.id !== id);
+      guardarEstadoLocal();
+      renderMermaTable();
+    }
+
+    function renderMermaTable() {
+      const tbody = document.getElementById('merma-table-body');
+      document.getElementById('info-count-badge').textContent = `${mermaList.length} ítems registrados`;
+
+      if(!mermaList.length) {
+        tbody.innerHTML = `<tr><td colspan="10" class="p-8 text-center text-slate-500">Sin productos agregados. Haz clic en "NUEVO REGISTRO".</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = mermaList.map((i, idx) => `
+        <tr class="hover:bg-slate-800/40">
+          <td class="p-3 text-center text-slate-400 font-bold border-r border-slate-800">${idx+1}</td>
+          <td class="p-3 text-center text-cyan-400 font-mono font-bold border-r border-slate-800">${i.sku}</td>
+          <td class="p-3 text-center border-r border-slate-800">${i.desc}</td>
+          <td class="p-3 text-center font-mono border-r border-slate-800">${i.cant}</td>
+          <td class="p-3 text-center font-mono border-r border-slate-800">S/ ${i.pc.toFixed(2)}</td>
+          <td class="p-3 text-center font-mono border-r border-slate-800">S/ ${i.pv.toFixed(2)}</td>
+          <td class="p-3 text-center border-r border-slate-800">${i.motivo}</td>
+          <td class="p-3 text-center border-r border-slate-800"><span class="px-2 py-0.5 text-[10px] rounded font-bold ${i.destino==='ENVÍO FÍSICO'?'bg-amber-950 text-amber-300 border border-amber-800':'bg-rose-950 text-rose-300 border border-rose-800'}">${i.destino}</span></td>
+          <td class="p-3 text-center border-r border-slate-800">${i.photo ? `<img src="${i.photo}" class="w-8 h-8 object-cover rounded mx-auto border border-slate-700">` : 'No'}</td>
+          <td class="p-3 text-center"><button onclick="deleteItem(${i.id})" class="text-rose-400 hover:text-rose-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td>
+        </tr>`).join('');
+      lucide.createIcons();
+    }
+
+    function finalizarYGuardarCarpeta() {
+      if(!mermaList.length) { mostrarNotificacion('No hay datos para guardar.'); return; }
+      const tienda = document.getElementById('head-tienda').value.trim() || 'SEDE';
+      const responsable = document.getElementById('head-responsable').value.trim() || 'RESP';
+      const fecha = document.getElementById('head-fecha').value;
+      const guia = document.getElementById('head-guia').value.trim() || 'S/G';
+
+      historialMermas.unshift({ id:'M_'+Date.now(), tienda, responsable, fecha, guia, items:[...mermaList] });
+      localStorage.setItem('joanis_historial_mermas', JSON.stringify(historialMermas));
+      
+      mermaList = [];
+      localStorage.removeItem('joanis_estado_actual');
+      document.getElementById('head-tienda').value = '';
+      document.getElementById('head-responsable').value = '';
+      document.getElementById('head-guia').value = '';
+      updateDocInfo();
+      renderMermaTable();
+      mostrarNotificacion('¡Carpeta guardada en el sistema con éxito!');
+    }
+
+    function renderCarpetasGrid() {
+      const container = document.getElementById('carpetas-grid');
+      if(!historialMermas.length) { container.innerHTML = `<p class="text-slate-500 text-xs col-span-full">No hay carpetas guardadas.</p>`; return; }
+      container.innerHTML = historialMermas.map(c => `
+        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 flex justify-between items-center text-xs shadow-md">
+          <div>
+            <h4 class="font-bold text-white text-sm">${c.tienda} (Guía: ${c.guia})</h4>
+            <p class="text-slate-400 text-[11px] mt-0.5">${c.fecha} | ${c.items.length} ítems acumulados</p>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="cargarCarpeta('${c.id}')" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg font-bold">Cargar</button>
+            <button onclick="confirmarAccion('¿Deseas eliminar esta carpeta guardada?', () => eliminarCarpeta('${c.id}'))" class="bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 px-2.5 py-1.5 rounded-lg font-bold"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+          </div>
+        </div>`).join('');
+      lucide.createIcons();
+    }
+
+    function cargarCarpeta(id) {
+      const c = historialMermas.find(x => x.id === id);
+      if(!c) return;
+      document.getElementById('head-tienda').value = c.tienda;
+      document.getElementById('head-responsable').value = c.responsable;
+      document.getElementById('head-fecha').value = c.fecha;
+      document.getElementById('head-guia').value = c.guia;
+      mermaList = JSON.parse(JSON.stringify(c.items));
+      updateDocInfo();
+      guardarEstadoLocal();
+      renderMermaTable();
+      switchMainTab('merma');
+    }
+
+    function eliminarCarpeta(id) {
+      historialMermas = historialMermas.filter(x => x.id !== id);
+      localStorage.setItem('joanis_historial_mermas', JSON.stringify(historialMermas));
+      renderCarpetasGrid();
+      mostrarNotificacion('Carpeta eliminada correctamente');
+    }
+
+    function loadERPFile(e) {
+      const file = e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = evt => {
+        const data = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+        let parsed = [];
+        for(let i=1; i<rows.length; i++) {
+          if(rows[i] && rows[i][1] && rows[i][3]) parsed.push({sku: String(rows[i][1]), barcode: String(rows[i][2]||''), name: String(rows[i][3])});
+        }
+        if(parsed.length) { erpDatabase = parsed; mostrarNotificacion(`¡${parsed.length} productos cargados desde el ERP!`); }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // EXPORTACIÓN A EXCEL IDÉNTICA AL FORMATO ORIGINAL (CON TIPOGRAFÍA ARIAL Y ALTURAS EXACTAS)
+    async function exportToExcel() {
+      if (!mermaList.length) { mostrarNotificacion('No hay datos para exportar.'); return; }
+      const tienda = document.getElementById('head-tienda').value.trim() || 'SEDE';
+      const responsable = document.getElementById('head-responsable').value.trim() || 'RESP';
+      const fecha = document.getElementById('head-fecha').value;
+      const guia = document.getElementById('head-guia').value.trim() || '';
+
+      const workbook = new ExcelJS.Workbook();
+      const ws = workbook.addWorksheet('Registro de merma');
+      
+      ws.views = [{ showGridLines: true }];
+
+      ws.columns = [
+        { width: 6 },   // A: N.°
+        { width: 14 },  // B: SKU
+        { width: 35 },  // C: Descripción
+        { width: 10 },  // D: Cantidad
+        { width: 12 },  // E: PC
+        { width: 12 },  // F: PV
+        { width: 22 },  // G: Motivo
+        { width: 22 },  // H: Destino
+        { width: 18 },  // I: Fecha
+        { width: 32 }   // J: Foto
+      ];
+
+      const colHeaderBlue = '0E3846';
+      const colRuleBlue = '37535E';
+      const colYellow = 'FFF2CC';
+      const colDataRowBg = 'F2F6F8';
+
+      const fontTitle = { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+      const fontHeader = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+      const fontRule = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+      const fontBold = { name: 'Arial', size: 10, bold: true };
+      const fontNormal = { name: 'Arial', size: 10 };
+
+      // Fila 1: Título Principal
+      ws.mergeCells('A1:J1');
+      const r1 = ws.getCell('A1');
+      r1.value = 'JOANIS | FORMATO DE REGISTRO DE MERMA';
+      r1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colHeaderBlue } };
+      r1.font = fontTitle;
+      r1.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      ws.getRow(1).height = 28;
+
+      // Fila 3: Tienda y Fecha
+      ws.mergeCells('A3:B3'); ws.mergeCells('C3:E3'); ws.mergeCells('F3:G3'); ws.mergeCells('H3:J3');
+      ws.getCell('A3').value = 'Tienda / sede:'; ws.getCell('A3').font = fontBold; ws.getCell('A3').alignment = { vertical: 'middle', horizontal: 'left' };
+      ws.getCell('C3').value = tienda; ws.getCell('C3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colYellow } }; ws.getCell('C3').font = fontNormal; ws.getCell('C3').alignment = { vertical: 'middle', horizontal: 'center' };
+      ws.getCell('F3').value = 'Fecha del registro:'; ws.getCell('F3').font = fontBold; ws.getCell('F3').alignment = { vertical: 'middle', horizontal: 'left' };
+      ws.getCell('H3').value = fecha; ws.getCell('H3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colYellow } }; ws.getCell('H3').font = fontNormal; ws.getCell('H3').alignment = { vertical: 'middle', horizontal: 'center' };
+      ws.getRow(3).height = 20;
+
+      // Fila 4: Responsable y Guía
+      ws.mergeCells('A4:B4'); ws.mergeCells('C4:E4'); ws.mergeCells('F4:G4'); ws.mergeCells('H4:J4');
+      ws.getCell('A4').value = 'Responsable:'; ws.getCell('A4').font = fontBold; ws.getCell('A4').alignment = { vertical: 'middle', horizontal: 'left' };
+      ws.getCell('C4').value = responsable; ws.getCell('C4').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colYellow } }; ws.getCell('C4').font = fontNormal; ws.getCell('C4').alignment = { vertical: 'middle', horizontal: 'center' };
+      ws.getCell('F4').value = 'N.° de guía:'; ws.getCell('F4').font = fontBold; ws.getCell('F4').alignment = { vertical: 'middle', horizontal: 'left' };
+      ws.getCell('H4').value = guia; ws.getCell('H4').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colYellow } }; ws.getCell('H4').font = fontNormal; ws.getCell('H4').alignment = { vertical: 'middle', horizontal: 'center' };
+      ws.getRow(4).height = 20;
+
+      // Reglas Institucionales (ALTURA EXACTA 32pt)
+      ws.mergeCells('A6:J6'); ws.getCell('A6').value = 'ENVÍO FÍSICO: solo productos electrónicos. Adjuntar Excel y guía. No enviar vidrio roto ni plástico roto.'; ws.getCell('A6').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colHeaderBlue } }; ws.getCell('A6').font = fontRule; ws.getCell('A6').alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }; ws.getRow(6).height = 32;
+      ws.mergeCells('A7:J7'); ws.getCell('A7').value = 'DESECHO: registrar los productos desechados. El Excel y las fotos sustentan que no sirven.'; ws.getCell('A7').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colRuleBlue } }; ws.getCell('A7').font = fontRule; ws.getCell('A7').alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }; ws.getRow(7).height = 32;
+      ws.mergeCells('A8:J8'); ws.getCell('A8').value = 'FOTOS: insertar una imagen grande y nítida en cada fila; mostrar el producto y su daño. PC y PV son precios unitarios.'; ws.getCell('A8').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colRuleBlue } }; ws.getCell('A8').font = fontRule; ws.getCell('A8').alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }; ws.getRow(8).height = 32;
+
+      // Fila 10: Cabecera de la Tabla (ALTURA EXACTA 40pt)
+      const headers = ['N.°', 'SKU', 'Descripción del producto', 'Cantidad', 'PC (S/)', 'PV (S/)', 'Motivo de la merma', 'Destino de la merma', 'Fecha envío / desecho', 'Fotografía del producto y daño'];
+      const hr = ws.getRow(10);
+      hr.height = 40;
+      headers.forEach((h, i) => {
+        const c = hr.getCell(i+1);
+        c.value = h;
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colHeaderBlue } };
+        c.font = fontHeader;
+        c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      });
+
+      // Filas dinámicas exactas según la cantidad ingresada (ALTURA 85pt)
+      let rIdx = 11;
+      for (let i = 0; i < mermaList.length; i++) {
+        const item = mermaList[i];
+        const row = ws.getRow(rIdx);
+        row.height = 85;
+
+        row.getCell(1).value = i + 1;
+        row.getCell(2).value = item.sku;
+        row.getCell(3).value = item.desc;
+        row.getCell(4).value = item.cant;
+        row.getCell(5).value = Number(item.pc); row.getCell(5).numFmt = '0.00';
+        row.getCell(6).value = Number(item.pv); row.getCell(6).numFnt = '0.00';
+        row.getCell(7).value = item.motivo;
+        row.getCell(8).value = item.destino;
+        row.getCell(9).value = item.fechaEnvio;
+
+        for (let col = 1; col <= 10; col++) {
+          const c = row.getCell(col);
+          c.font = fontNormal;
+          c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colDataRowBg } };
+          c.alignment = { vertical: 'middle', horizontal: 'center' };
+          c.border = {
+            top: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+            bottom: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+            left: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+            right: { style: 'thin', color: { argb: 'FFD9D9D9' } }
+          };
+        }
+
+        if (item.photo) {
+          try {
+            const imgId = workbook.addImage({ base64: item.photo, extension: 'png' });
+            ws.addImage(imgId, { tl: { col: 9.1, row: rIdx - 1 + 0.1 }, ext: { width: 130, height: 95 } });
+          } catch(e) { row.getCell(10).value = '[Foto]'; }
+        } else {
+          row.getCell(10).value = 'Insertar foto grande y nítida aquí';
+          row.getCell(10).font = { name: 'Arial', size: 9, color: { argb: 'FF888888' }, italic: true };
+        }
+
+        rIdx++;
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      saveAs(new Blob([buffer]), `REGISTRO_MERMA_${tienda}_${fecha}.xlsx`);
+    }
+  </script>
+</body>
+</html>
